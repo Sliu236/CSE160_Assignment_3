@@ -4,6 +4,8 @@
 [sliu236@ucsc.edu 1852375]
 
 */
+// ColoredPoint.js (c) 2012 matsuda
+// Vertex shader program
 var VSHADER_SOURCE = `
   precision mediump float;
   attribute vec4 a_Position;
@@ -18,30 +20,31 @@ var VSHADER_SOURCE = `
     v_UV = a_UV;
   }`;
 
-
 // Fragment shader program
 var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
+  uniform sampler2D u_Sampler1;
+  uniform sampler2D u_Sampler2;
   uniform int u_whichTexture;
   void main() {
-
     if (u_whichTexture == -2) {
       gl_FragColor = u_FragColor;
-    
     } else if (u_whichTexture == -1) {
       gl_FragColor = vec4(v_UV, 1.0, 1.0);
-
     } else if (u_whichTexture == 0) {
       gl_FragColor = texture2D(u_Sampler0, v_UV);
-  
+    } else if (u_whichTexture == 1) {
+      gl_FragColor = texture2D(u_Sampler1, v_UV);
+    } else if (u_whichTexture == 2) {
+      gl_FragColor = texture2D(u_Sampler2, v_UV);
     } else {
       gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0);
     }
+  }`;
 
-}`;
 
 let canvas;
 let gl;
@@ -54,6 +57,8 @@ let u_GlobalRotateMatrix;
 let u_ViewMatrix;
 let u_whichTexture;
 let u_Sampler0;
+let u_Sampler1;
+let u_Sampler2;
 
 let g_globalAngle = 0.0;
 let g_pitchAngle = 0.0; 
@@ -62,10 +67,8 @@ let g_lastMouseX = 0;
 let g_lastMouseY = 0;
 
 function setupWebGL() {
-    // Retrieve <canvas> element
     canvas = document.getElementById('webgl');
 
-    // Get the rendering context for WebGL
     gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
     if (!gl) {
       console.log('Failed to get the rendering context for WebGL');
@@ -75,65 +78,26 @@ function setupWebGL() {
 }
 
 function connectVariablesToGLSL() { 
-    // Initialize shaders
-    if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
-      console.log('Failed to intialize shaders.');
+  if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
+      console.log('Failed to initialize shaders.');
       return;
-    }
-  
-    // Get the storage location of a_Position
-    a_Position = gl.getAttribLocation(gl.program, 'a_Position');
-    if (a_Position < 0) {
-      console.log('Failed to get the storage location of a_Position');
-      return;
-    }
-  
-    // Get the storage location of a_UV
-    a_UV = gl.getAttribLocation(gl.program, 'a_UV');
-    if (a_UV < 0) {
-      console.log('Failed to get the storage location of a_UV');
-      return;
-    }
+  }
 
-    // Get the storage location of u_FragColor
-    u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
-    if (!u_FragColor) {
-      console.log('Failed to get the storage location of u_FragColor');
-      return;
-    }
+  a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+  a_UV = gl.getAttribLocation(gl.program, 'a_UV');
+  u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
+  u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
+  u_GlobalRotateMatrix = gl.getUniformLocation(gl.program, 'u_GlobalRotateMatrix');
+  u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
+  u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
+  u_whichTexture = gl.getUniformLocation(gl.program, 'u_whichTexture');
 
-    u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
-    if (!u_ModelMatrix) {
-      console.log('Failed to get the storage location of u_ModelMatrix');
-      return;
-    }
+  u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
+  u_Sampler1 = gl.getUniformLocation(gl.program, 'u_Sampler1');
+  u_Sampler2 = gl.getUniformLocation(gl.program, 'u_Sampler2');
 
-    u_GlobalRotateMatrix = gl.getUniformLocation(gl.program, 'u_GlobalRotateMatrix');
-    if (!u_GlobalRotateMatrix) {
-      console.log('Failed to get the storage location of u_GlobalRotateMatrix');
-      return;
-    }
-
-    u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
-    if (!u_ViewMatrix) {
-      console.log('Failed to get the storage location of u_ViewMatrix');
-      return;
-    }
-    
-    u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
-    if (!u_ProjectionMatrix) {
-      console.log('Failed to get the storage location of u_ProjectionMatrix');
-      return;
-    }
-
-    u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
-    if (!u_Sampler0) {
-      console.log('Failed to get the storage location of u_Sampler0');
-      return false;
-    }
-    
-    let identityM = new Matrix4();
-    gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
+  let identityM = new Matrix4();
+  gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
 
 function convertCoordinatesEventToGL(ev) {
@@ -189,44 +153,49 @@ function addActionForHtmlUI() {
 
 
 function initTextures() {
-  // Create the texture object and set its properties
-  var image = new Image();
-  if (!image) {
-    console.log('Failed to create the image object');
-    return false;
+  let image0 = new Image();
+  let image1 = new Image();
+  let image2 = new Image();
+
+  if (!image0 || !image1 || !image2) {
+      console.log('Failed to create image objects');
+      return false;
   }
 
-  // Register the event handler to be called on loading an image
-  image.onload = function(){ sendTextureToGLSL(image); };
-  image.src = 'sky.jpg';
+  image0.onload = function() { sendTextureToGLSL(image0, gl.TEXTURE0, u_Sampler0); };
+  image1.onload = function() { sendTextureToGLSL(image1, gl.TEXTURE1, u_Sampler1); };
+  image2.onload = function() { sendTextureToGLSL(image2, gl.TEXTURE2, u_Sampler2); };
+
+  image0.src = 'sky.jpg';
+  image1.src = 'dirt.jpg';
+  image2.src = 'grass.jpg';
 
   return true;
 }
 
 
-function sendTextureToGLSL(image) {
-  var texture = gl.createTexture();
+function sendTextureToGLSL(image, texUnit, samplerUniform) {
+  let texture = gl.createTexture();
   if (!texture) {
-    console.log('Failed to create the texture object');
-    return false;
+      console.log('Failed to create the texture object');
+      return false;
   }
 
-  u_whichTexture = gl.getUniformLocation(gl.program, 'u_whichTexture');
-  if (u_whichTexture === null) {
-    console.log('Failed to get the storage location of u_whichTexture');
-    return;
-  }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.activeTexture(texUnit);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
 
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1); // flip the image's y coordinate
-  gl.activeTexture(gl.TEXTURE0); // Activate texture unit 0
-  gl.bindTexture(gl.TEXTURE_2D, texture); // Bind the texture object to the target
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // Set the texture filtering function
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image); // Set the image to texture object
-  gl.uniform1i(u_Sampler0, 0); // Pass the texture unit 0 to u_Sampler0
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  gl.uniform1i(samplerUniform, texUnit - gl.TEXTURE0);
 
-  console.log("Texture loaded.");
+  console.log("Texture loaded into unit " + (texUnit - gl.TEXTURE0));
 }
+
 
 
 function main() {
@@ -322,44 +291,36 @@ var g_look = [0, 0, -100];
 var g_up = [0, 1, 0];
 
 function renderScene() {
-  var startTime = performance.now();
-
-  var globalRotMat = new Matrix4().rotate(g_globalAngle,0,1,0);
+  var globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
   let viewMatrix = new Matrix4();
-  viewMatrix.setLookAt(
-    g_eye[0], g_eye[1], g_eye[2],
-    g_look[0], g_look[1], g_look[2],
-    g_up[0], g_up[1], g_up[2]
-  );
+  viewMatrix.setLookAt(g_eye[0], g_eye[1], g_eye[2], g_look[0], g_look[1], g_look[2], g_up[0], g_up[1], g_up[2]);
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
-  
 
-  let projMatrix = new Matrix4;
-  projMatrix.setPerspective(60, canvas.width/canvas.height, 0.1, 100);
+  let projMatrix = new Matrix4();
+  projMatrix.setPerspective(60, canvas.width / canvas.height, 0.1, 100);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMatrix.elements);
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-
 
   let cube1 = new Cube();
-  cube1.color = [1.0, 0.0, 0.0, 1.0]; 
-  cube1.textureNum = 0;
-  cube1.matrix.setTranslate(0, 0, 0); 
-  cube1.matrix.scale(0.5, 0.5, 0.5); 
+  cube1.textureNum = 0;  // sky.jpg
+  cube1.matrix.setTranslate(-0.5, 0, 0);
+  cube1.matrix.scale(0.5, 0.5, 0.5);
   cube1.render();
 
   let cube2 = new Cube();
-  cube2.color = [1.0, 1.0, 0.0, 1.0];
-  cube2.textureNum = -1;
+  cube2.textureNum = 1;  // dirt.jpg
   cube2.matrix.setTranslate(0.5, 0, 0);
   cube2.matrix.scale(0.5, 0.5, 0.5);
   cube2.render();
 
-  var duration = performance.now() - startTime;
-  sentTextToHTML("ms: " + Math.floor(duration) + " fps: " + (1000/duration).toFixed(1), "numdot");
+  let cube3 = new Cube();
+  cube3.textureNum = 2;  // wall.jpg
+  cube3.matrix.setTranslate(1.5, 0, 0);
+  cube3.matrix.scale(0.5, 0.5, 0.5);
+  cube3.render();
 }
 
 function sentTextToHTML(text, htmlID) {
