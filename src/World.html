@@ -5,15 +5,12 @@
     <title>CSE160 ASGN2 - Virtual World</title>
   </head>
   <body onload="main()">
-    <!-- Canvas 区域 -->
     <canvas id="webgl" width="400" height="400">
       Please use a browser that supports "canvas"
     </canvas>
 
-    <!-- 显示性能数据 -->
     <p id="numdot">Performance info</p>
 
-    <!-- 摄像机控制相关 UI -->
     <p>
       Camera Angle (Y-axis): 
       <input type="range" min="-180" max="180" value="5" class="slider" id="angleSlide">
@@ -26,7 +23,6 @@
       <button id="ResetCameraButton">Reset Camera</button>
     </p>
 
-    <!-- 载入所需的库和脚本 -->
     <script src="../lib/webgl-utils.js"></script>
     <script src="../lib/webgl-debug.js"></script>
     <script src="../lib/cuon-utils.js"></script>

@@ -30,7 +30,6 @@ var FSHADER_SOURCE = `
   }
 `;
 
-// 全局变量声明
 let canvas;
 let gl;
 let a_Position;
@@ -112,7 +111,6 @@ function connectVariablesToGLSL() {
       return;
     }
     
-    // 初始化模型矩阵为单位矩阵
     let identityM = new Matrix4();
     gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
@@ -127,35 +125,34 @@ function convertCoordinatesEventToGL(ev) {
 }
 
 function addActionForHtmlUI() {
-  // 控制全局旋转角度（yaw）
+  // Yaw
   document.getElementById('angleSlide').addEventListener('input', function() { 
       g_globalAngle = parseFloat(this.value); 
       renderScene();
   });
-  // 控制俯仰角（pitch）
+  // Pitch
   document.getElementById('pitchSlide').addEventListener('input', function() { 
       g_pitchAngle = parseFloat(this.value);
       renderScene();
   });
 
-  // 重置摄像机按钮
+  // Reset Camera
   document.getElementById('ResetCameraButton').addEventListener('click', resetCamera);
 
-  // 鼠标拖动事件：按下鼠标时记录位置
+  // drag mouse to rotate camera
   canvas.addEventListener("mousedown", function (ev) {
       g_mouseDragging = true; 
       g_lastMouseX = ev.clientX; 
       g_lastMouseY = ev.clientY;
   });
 
-  // 鼠标移动时更新摄像机角度
+  // camera rotate
   canvas.addEventListener("mousemove", function (ev) {
       if (g_mouseDragging) {
           let dx = ev.clientX - g_lastMouseX;
           let dy = ev.clientY - g_lastMouseY;
           g_globalAngle += dx * 0.5;
           g_pitchAngle -= dy * 0.5;
-          // 限制俯仰角范围
           g_pitchAngle = Math.max(-90, Math.min(90, g_pitchAngle));
           g_lastMouseX = ev.clientX;
           g_lastMouseY = ev.clientY;
@@ -163,22 +160,22 @@ function addActionForHtmlUI() {
       }
   });
 
-  // 鼠标抬起时停止拖动
+  // stop camera rotate
   canvas.addEventListener("mouseup", function () { 
       g_mouseDragging = false; 
   });
 }
 
 function main() {
-  setupWebGL(); // WebGL 初始化
-  connectVariablesToGLSL(); // 连接 GLSL 变量
-  addActionForHtmlUI(); // 添加 HTML UI 事件处理
+  setupWebGL(); 
+  connectVariablesToGLSL(); 
+  addActionForHtmlUI();
 
-  // 鼠标点击事件（本例中没有额外逻辑，只调用 renderScene()）
+  
   canvas.onmousedown = click;
   canvas.onmousemove  = function(ev) { if (ev.buttons === 1) click(ev); };
 
-  // 设置 canvas 清屏颜色（例如天蓝色）
+
   gl.clearColor(0, 0, 0, 1.0);
 
   requestAnimationFrame(tick);
@@ -188,14 +185,12 @@ var g_startTime = performance.now() / 1000.0;
 var g_seconds = performance.now()/1000.0 - g_startTime;
 
 function tick() {
-  // 动画更新逻辑
   g_seconds = performance.now()/1000.0 - g_startTime;
   renderScene();
   requestAnimationFrame(tick);
 }
 
 function click(ev) {
-  // 本示例中点击只触发重新渲染
   let [x, y] = convertCoordinatesEventToGL(ev);
   renderScene();
 }
@@ -203,14 +198,12 @@ function click(ev) {
 function renderScene() {
   var startTime = performance.now();
 
-  // 构建全局旋转矩阵（先绕 Y 轴旋转，再绕 X 轴旋转）
   var globalRotMat = new Matrix4()
       .rotate(g_globalAngle, 0, 1, 0)   // yaw
       .rotate(g_pitchAngle, 1, 0, 0);     // pitch
 
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
-  // 设置视图和投影矩阵
   let viewMatrix = new Matrix4().setLookAt(0, 0, 3, 0, 0, 0, 0, 1, 0);
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
 
@@ -220,11 +213,10 @@ function renderScene() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 
-  // 创建并渲染立方体对象
   let cube = new Cube();
-  cube.color = [1.0, 0.0, 0.0, 1.0]; // 红色
-  cube.matrix.setTranslate(0, 0, 0); // 设置位置为原点
-  cube.matrix.scale(0.5, 0.5, 0.5); // 设置缩放为 1
+  cube.color = [1.0, 0.0, 0.0, 1.0]; 
+  cube.matrix.setTranslate(0, 0, 0); 
+  cube.matrix.scale(0.5, 0.5, 0.5); 
   cube.render();
 
   var duration = performance.now() - startTime;
@@ -247,7 +239,6 @@ function resetCamera() {
   renderScene();
 }
 
-// 开始执行 main() 函数
 main();
 
 

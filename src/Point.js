@@ -15,9 +15,6 @@ class Point {
       var rgba = this.color;
       var size = this.size;
   
-      //var xy = g_shapeList[i].position;
-      //var rgba = g_shapeList[i].color;
-      //var size = g_shapeList[i].size;
         
       gl.disableVertexAttribArray(a_Position);
       // gl.bufferdata(gl.ARRAY_BUFFER, new Float32Array([ xy[0], xy[1]])
