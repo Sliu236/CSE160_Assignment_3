@@ -3,8 +3,6 @@
 /*[student's name: Size Liu]
 [sliu236@ucsc.edu 1852375]
 
-Notes to Grader:
-Removed fish and underwater mountain rendering functions.
 */
 var VSHADER_SOURCE = `
   precision mediump float;
@@ -20,18 +18,30 @@ var VSHADER_SOURCE = `
     v_UV = a_UV;
   }`;
 
+
 // Fragment shader program
 var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
   uniform sampler2D u_Sampler0;
+  uniform int u_whichTexture;
   void main() {
-    gl_FragColor = mix(u_FragColor, vec4(v_UV, 0.0, 1.0), 0.5);
-    gl_FragColor = texture2D(u_Sampler0, v_UV);
-}
 
-`;
+    if (u_whichTexture == -2) {
+      gl_FragColor = u_FragColor;
+    
+    } else if (u_whichTexture == -1) {
+      gl_FragColor = vec4(v_UV, 1.0, 1.0);
+
+    } else if (u_whichTexture == 0) {
+      gl_FragColor = texture2D(u_Sampler0, v_UV);
+  
+    } else {
+      gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0);
+    }
+
+}`;
 
 let canvas;
 let gl;
@@ -42,6 +52,8 @@ let u_ModelMatrix;
 let u_ProjectionMatrix;
 let u_GlobalRotateMatrix;
 let u_ViewMatrix;
+let u_whichTexture;
+let u_Sampler0;
 
 let g_globalAngle = 0.0;
 let g_pitchAngle = 0.0; 
@@ -113,6 +125,12 @@ function connectVariablesToGLSL() {
       console.log('Failed to get the storage location of u_ProjectionMatrix');
       return;
     }
+
+    u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
+    if (!u_Sampler0) {
+      console.log('Failed to get the storage location of u_Sampler0');
+      return false;
+    }
     
     let identityM = new Matrix4();
     gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -170,20 +188,8 @@ function addActionForHtmlUI() {
 }
 
 
-function initTextures(gl, n) {
-  var texture = gl.createTexture();
-  if (!texture) {
-    console.log('Failed to create the texture object');
-    return false;
-  }
-
-  // Get the storage location of u_Sampler0
-  var u_Sampler00 = gl.getUniformLocation(gl.program, 'u_Sampler0');
-  if (!u_Sampler00) {
-    console.log('Failed to get the storage location of u_Sampler0');
-    return false;
-  }
-
+function initTextures() {
+  // Create the texture object and set its properties
   var image = new Image();
   if (!image) {
     console.log('Failed to create the image object');
@@ -191,14 +197,27 @@ function initTextures(gl, n) {
   }
 
   // Register the event handler to be called on loading an image
-  image.onload = function(){ loadTexture(gl, n, texture, u_Sampler00, image); };
+  image.onload = function(){ sendTextureToGLSL(image); };
   image.src = 'sky.jpg';
 
   return true;
 }
 
 
-function loadTexture(gl, n, texture, u_Sampler0, image) {
+function sendTextureToGLSL(image) {
+  var texture = gl.createTexture();
+  if (!texture) {
+    console.log('Failed to create the texture object');
+    return false;
+  }
+
+  u_whichTexture = gl.getUniformLocation(gl.program, 'u_whichTexture');
+  if (u_whichTexture === null) {
+    console.log('Failed to get the storage location of u_whichTexture');
+    return;
+  }
+
+
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1); // flip the image's y coordinate
   gl.activeTexture(gl.TEXTURE0); // Activate texture unit 0
   gl.bindTexture(gl.TEXTURE_2D, texture); // Bind the texture object to the target
@@ -219,7 +238,9 @@ function main() {
   canvas.onmousedown = click;
   canvas.onmousemove  = function(ev) { if (ev.buttons === 1) click(ev); };
 
-  initTextures(gl, 0);
+  document.onkeydown = keydown;
+
+  initTextures();
 
   gl.clearColor(0, 0, 0, 1.0);
 
@@ -240,29 +261,102 @@ function click(ev) {
   renderScene();
 }
 
+function keydown(ev) {
+  let speed = 0.2;
+  // W: 前进 (沿 -Z 方向)
+  if (ev.keyCode === 87) {
+    g_eye[2] -= speed;
+    g_look[2] -= speed;
+  }
+  // S: 后退 (沿 +Z 方向)
+  else if (ev.keyCode === 83) {
+    g_eye[2] += speed;
+    g_look[2] += speed;
+  }
+  // A: 向左 (沿 -X 方向)
+  else if (ev.keyCode === 65) {
+    g_eye[0] -= speed;
+    g_look[0] -= speed;
+  }
+  // D: 向右 (沿 +X 方向)
+  else if (ev.keyCode === 68) {
+    g_eye[0] += speed;
+    g_look[0] += speed;
+  }
+  // Q: 视角左转 (绕 up 轴旋转 +5°)
+  else if (ev.keyCode === 81) {
+    let f = new Vector3(g_look); 
+    f.sub(new Vector3(g_eye));          // f = g_look - g_eye
+    let rot = new Matrix4();
+    rot.setRotate(5, g_up[0], g_up[1], g_up[2]);
+    f = rot.multiplyVector3(f);
+    // 更新 g_look = g_eye + f
+    g_look = [
+      g_eye[0] + f.elements[0],
+      g_eye[1] + f.elements[1],
+      g_eye[2] + f.elements[2]
+    ];
+  }
+  // E: 视角右转 (绕 up 轴旋转 -5°)
+  else if (ev.keyCode === 69) {
+    let f = new Vector3(g_look);
+    f.sub(new Vector3(g_eye));          // f = g_look - g_eye
+    let rot = new Matrix4();
+    rot.setRotate(-5, g_up[0], g_up[1], g_up[2]);
+    f = rot.multiplyVector3(f);
+    g_look = [
+      g_eye[0] + f.elements[0],
+      g_eye[1] + f.elements[1],
+      g_eye[2] + f.elements[2]
+    ];
+  }
+
+  renderScene();
+  console.log(ev.keyCode);
+}
+
+
+
+var g_eye = [0, 0, 3];
+var g_look = [0, 0, -100];
+var g_up = [0, 1, 0];
+
 function renderScene() {
   var startTime = performance.now();
 
-  var globalRotMat = new Matrix4()
-      .rotate(g_globalAngle, 0, 1, 0)   // yaw
-      .rotate(g_pitchAngle, 1, 0, 0);     // pitch
-
+  var globalRotMat = new Matrix4().rotate(g_globalAngle,0,1,0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
-  let viewMatrix = new Matrix4().setLookAt(0, 0, 3, 0, 0, 0, 0, 1, 0);
+  let viewMatrix = new Matrix4();
+  viewMatrix.setLookAt(
+    g_eye[0], g_eye[1], g_eye[2],
+    g_look[0], g_look[1], g_look[2],
+    g_up[0], g_up[1], g_up[2]
+  );
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
+  
 
-  let projMatrix = new Matrix4().setPerspective(60, canvas.width/canvas.height, 0.1, 100);
+  let projMatrix = new Matrix4;
+  projMatrix.setPerspective(60, canvas.width/canvas.height, 0.1, 100);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMatrix.elements);
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT);
 
 
-  let cube = new Cube();
-  cube.color = [1.0, 0.0, 0.0, 1.0]; 
-  cube.matrix.setTranslate(0, 0, 0); 
-  cube.matrix.scale(0.5, 0.5, 0.5); 
-  cube.render();
+  let cube1 = new Cube();
+  cube1.color = [1.0, 0.0, 0.0, 1.0]; 
+  cube1.textureNum = 0;
+  cube1.matrix.setTranslate(0, 0, 0); 
+  cube1.matrix.scale(0.5, 0.5, 0.5); 
+  cube1.render();
+
+  let cube2 = new Cube();
+  cube2.color = [1.0, 1.0, 0.0, 1.0];
+  cube2.textureNum = -1;
+  cube2.matrix.setTranslate(0.5, 0, 0);
+  cube2.matrix.scale(0.5, 0.5, 0.5);
+  cube2.render();
 
   var duration = performance.now() - startTime;
   sentTextToHTML("ms: " + Math.floor(duration) + " fps: " + (1000/duration).toFixed(1), "numdot");
@@ -285,8 +379,6 @@ function resetCamera() {
 }
 
 main();
-
-
 
 
 
