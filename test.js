@@ -20,17 +20,20 @@ var VSHADER_SOURCE = `
     v_UV = a_UV;
   }`;
 
+
 // Fragment shader program
 var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
   void main() {
+    // 演示使用 UV 坐标调试显示颜色
+    gl_FragColor = vec4(v_UV, 1.0, 1.0);
+    // 若需要使用单一颜色，可启用下面这一行：
     gl_FragColor = u_FragColor;
   }
 `;
 
-// 全局变量声明
 let canvas;
 let gl;
 let a_Position;
@@ -41,80 +44,84 @@ let u_ProjectionMatrix;
 let u_GlobalRotateMatrix;
 let u_ViewMatrix;
 
+// 全局摄像机控制相关角度
 let g_globalAngle = 0.0;
-let g_pitchAngle = 0.0; 
+let g_pitchAngle = 0.0;
+
+// 鼠标拖动变量
 let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
 
 function setupWebGL() {
-    // Retrieve <canvas> element
-    canvas = document.getElementById('webgl');
+  // 获取 canvas 元素
+  canvas = document.getElementById('webgl');
 
-    // Get the rendering context for WebGL
-    gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
-    if (!gl) {
-      console.log('Failed to get the rendering context for WebGL');
-      return;
-    }
-    gl.enable(gl.DEPTH_TEST);
+  // 获取 WebGL 渲染上下文
+  gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+  if (!gl) {
+    console.log('Failed to get the rendering context for WebGL');
+    return;
+  }
+  gl.enable(gl.DEPTH_TEST);
 }
 
 function connectVariablesToGLSL() { 
-    // Initialize shaders
-    if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
-      console.log('Failed to intialize shaders.');
-      return;
-    }
+  // 初始化着色器
+  if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
+    console.log('Failed to intialize shaders.');
+    return;
+  }
+
+  // 获取 a_Position 属性位置
+  a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+  if (a_Position < 0) {
+    console.log('Failed to get the storage location of a_Position');
+    return;
+  }
   
-    // Get the storage location of a_Position
-    a_Position = gl.getAttribLocation(gl.program, 'a_Position');
-    if (a_Position < 0) {
-      console.log('Failed to get the storage location of a_Position');
-      return;
-    }
+  // 获取 a_UV 属性位置
+  a_UV = gl.getAttribLocation(gl.program, 'a_UV');
+  if (a_UV < 0) {
+    console.log('Failed to get the storage location of a_UV');
+    return;
+  }
+
+  // 获取 u_FragColor uniform 位置
+  u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
+  if (!u_FragColor) {
+    console.log('Failed to get the storage location of u_FragColor');
+    return;
+  }
+
+  // 获取其他 uniform 位置
+  u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
+  if (!u_ModelMatrix) {
+    console.log('Failed to get the storage location of u_ModelMatrix');
+    return;
+  }
+
+  u_GlobalRotateMatrix = gl.getUniformLocation(gl.program, 'u_GlobalRotateMatrix');
+  if (!u_GlobalRotateMatrix) {
+    console.log('Failed to get the storage location of u_GlobalRotateMatrix');
+    return;
+  }
+
+  u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
+  if (!u_ViewMatrix) {
+    console.log('Failed to get the storage location of u_ViewMatrix');
+    return;
+  }
   
-    // Get the storage location of a_UV
-    a_UV = gl.getAttribLocation(gl.program, 'a_UV');
-    if (a_UV < 0) {
-      console.log('Failed to get the storage location of a_UV');
-      return;
-    }
-
-    // Get the storage location of u_FragColor
-    u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
-    if (!u_FragColor) {
-      console.log('Failed to get the storage location of u_FragColor');
-      return;
-    }
-
-    u_ModelMatrix = gl.getUniformLocation(gl.program, 'u_ModelMatrix');
-    if (!u_ModelMatrix) {
-      console.log('Failed to get the storage location of u_ModelMatrix');
-      return;
-    }
-
-    u_GlobalRotateMatrix = gl.getUniformLocation(gl.program, 'u_GlobalRotateMatrix');
-    if (!u_GlobalRotateMatrix) {
-      console.log('Failed to get the storage location of u_GlobalRotateMatrix');
-      return;
-    }
-
-    u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
-    if (!u_ViewMatrix) {
-      console.log('Failed to get the storage location of u_ViewMatrix');
-      return;
-    }
-    
-    u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
-    if (!u_ProjectionMatrix) {
-      console.log('Failed to get the storage location of u_ProjectionMatrix');
-      return;
-    }
-    
-    // 初始化模型矩阵为单位矩阵
-    let identityM = new Matrix4();
-    gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
+  u_ProjectionMatrix = gl.getUniformLocation(gl.program, 'u_ProjectionMatrix');
+  if (!u_ProjectionMatrix) {
+    console.log('Failed to get the storage location of u_ProjectionMatrix');
+    return;
+  }
+  
+  // 初始化模型矩阵为单位矩阵
+  let identityM = new Matrix4();
+  gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
 
 function convertCoordinatesEventToGL(ev) {
@@ -127,6 +134,8 @@ function convertCoordinatesEventToGL(ev) {
 }
 
 function addActionForHtmlUI() {
+  // 这里只保留摄像机控制相关的滑动条和按钮
+
   // 控制全局旋转角度（yaw）
   document.getElementById('angleSlide').addEventListener('input', function() { 
       g_globalAngle = parseFloat(this.value); 
@@ -179,7 +188,7 @@ function main() {
   canvas.onmousemove  = function(ev) { if (ev.buttons === 1) click(ev); };
 
   // 设置 canvas 清屏颜色（例如天蓝色）
-  gl.clearColor(0, 0, 0, 1.0);
+  gl.clearColor(0, 0, 1.0, 1.0);
 
   requestAnimationFrame(tick);
 }
@@ -188,14 +197,13 @@ var g_startTime = performance.now() / 1000.0;
 var g_seconds = performance.now()/1000.0 - g_startTime;
 
 function tick() {
-  // 动画更新逻辑
+  // 这里可以添加其它动画更新逻辑
   g_seconds = performance.now()/1000.0 - g_startTime;
   renderScene();
   requestAnimationFrame(tick);
 }
 
 function click(ev) {
-  // 本示例中点击只触发重新渲染
   let [x, y] = convertCoordinatesEventToGL(ev);
   renderScene();
 }
@@ -210,7 +218,7 @@ function renderScene() {
 
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
-  // 设置视图和投影矩阵
+  // 这里设置一个简单的视图和投影矩阵
   let viewMatrix = new Matrix4().setLookAt(0, 0, 3, 0, 0, 0, 0, 1, 0);
   gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
 
@@ -219,13 +227,6 @@ function renderScene() {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-
-  // 创建并渲染立方体对象
-  let cube = new Cube();
-  cube.color = [1.0, 0.0, 0.0, 1.0]; // 红色
-  cube.matrix.setTranslate(0, 0, 0); // 设置位置为原点
-  cube.matrix.scale(0.5, 0.5, 0.5); // 设置缩放为 1
-  cube.render();
 
   var duration = performance.now() - startTime;
   sentTextToHTML("ms: " + Math.floor(duration) + " fps: " + (1000/duration).toFixed(1), "numdot");
@@ -247,11 +248,4 @@ function resetCamera() {
   renderScene();
 }
 
-// 开始执行 main() 函数
 main();
-
-
-
-
-
-
