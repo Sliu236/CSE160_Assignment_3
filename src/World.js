@@ -25,9 +25,12 @@ var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
   uniform vec4 u_FragColor;
+  uniform sampler2D u_Sampler0;
   void main() {
-    gl_FragColor = u_FragColor;
-  }
+    gl_FragColor = mix(u_FragColor, vec4(v_UV, 0.0, 1.0), 0.5);
+    gl_FragColor = texture2D(u_Sampler0, v_UV);
+}
+
 `;
 
 let canvas;
@@ -166,6 +169,47 @@ function addActionForHtmlUI() {
   });
 }
 
+
+function initTextures(gl, n) {
+  var texture = gl.createTexture();
+  if (!texture) {
+    console.log('Failed to create the texture object');
+    return false;
+  }
+
+  // Get the storage location of u_Sampler0
+  var u_Sampler00 = gl.getUniformLocation(gl.program, 'u_Sampler0');
+  if (!u_Sampler00) {
+    console.log('Failed to get the storage location of u_Sampler0');
+    return false;
+  }
+
+  var image = new Image();
+  if (!image) {
+    console.log('Failed to create the image object');
+    return false;
+  }
+
+  // Register the event handler to be called on loading an image
+  image.onload = function(){ loadTexture(gl, n, texture, u_Sampler00, image); };
+  image.src = 'sky.jpg';
+
+  return true;
+}
+
+
+function loadTexture(gl, n, texture, u_Sampler0, image) {
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1); // flip the image's y coordinate
+  gl.activeTexture(gl.TEXTURE0); // Activate texture unit 0
+  gl.bindTexture(gl.TEXTURE_2D, texture); // Bind the texture object to the target
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // Set the texture filtering function
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image); // Set the image to texture object
+  gl.uniform1i(u_Sampler0, 0); // Pass the texture unit 0 to u_Sampler0
+
+  console.log("Texture loaded.");
+}
+
+
 function main() {
   setupWebGL(); 
   connectVariablesToGLSL(); 
@@ -175,6 +219,7 @@ function main() {
   canvas.onmousedown = click;
   canvas.onmousemove  = function(ev) { if (ev.buttons === 1) click(ev); };
 
+  initTextures(gl, 0);
 
   gl.clearColor(0, 0, 0, 1.0);
 
