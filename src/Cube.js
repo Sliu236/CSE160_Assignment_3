@@ -4,12 +4,6 @@
 Notes to Grader:
 [N/A]*/
 
-/*[student's name: Size Liu]
-[sliu236@ucsc.edu 1852375]
-
-Notes to Grader:
-This version of Cube renders a cube with UV coordinates for each face.
-*/
 
 class Cube {
     constructor() {
