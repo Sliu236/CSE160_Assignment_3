@@ -11,16 +11,21 @@
 
     <p id="numdot">Performance info</p>
 
-    <p>
-      Camera Angle (Y-axis): 
-      <input type="range" min="-180" max="180" value="5" class="slider" id="angleSlide">
-    </p>
-    <p>
-      Camera Angle (X-axis): 
-      <input type="range" min="-180" max="180" value="0" class="slider" id="pitchSlide">
-    </p>
-    <p>
-    </p>
+    <div class="controls">
+      <h2>How to Controls</h2>
+      <ul>
+        <li><span class="highlight">W A S D</span> - Move camera (Forward, Backward, Left, Right)</li>
+        <li><span class="highlight">Mouse</span> - Look around (You need to right click the canvas first, hit ESC to quit)</li>
+        <li><span class="highlight">Click</span> - Lock/Unlock cursor</li>
+        <li><span class="highlight">Z</span> - Add block in front (Some are not very sensitive, you may need to try a few more times)</li>
+        <li><span class="highlight">X</span> - Remove block in front (Some are not very sensitive, you may need to try a few more times)</li>
+        <li><span class="highlight">ESC</span> - Exit pointer lock mode</li>
+      </ul>
+      <h2> Pac-Man </h2>
+        <ul>
+          <li><em>A simple Pac-Man game is built in.</em> On each page refresh, several yellow squares are randomly generated in the canvas, and when the coordinates of your control camera coincide with the yellow squares (<span style="color: goldenrod;">“Pacman”</span>), you get 1 point (see Console).</li>
+        </ul>        
+    </div>
 
     <script src="../lib/webgl-utils.js"></script>
     <script src="../lib/webgl-debug.js"></script>

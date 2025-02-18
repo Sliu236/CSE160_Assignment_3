@@ -1,6 +1,3 @@
-// ===================================
-// Vertex Shader Source Code
-// ===================================
 var VSHADER_SOURCE = `
   precision mediump float;
   attribute vec4 a_Position;
@@ -16,9 +13,7 @@ var VSHADER_SOURCE = `
   }
 `;
 
-// ===================================
-// Fragment Shader Source Code
-// ===================================
+
 var FSHADER_SOURCE = `
   precision mediump float;
   varying vec2 v_UV;
@@ -50,18 +45,14 @@ var FSHADER_SOURCE = `
   }
 `;
 
-// ===================================
-// 全局变量与 GLSL uniform 变量
-// ===================================
 let canvas;
 let gl;
 let a_Position, a_UV;
 let u_FragColor, u_ModelMatrix, u_ProjectionMatrix, u_GlobalRotateMatrix, u_ViewMatrix;
 let u_whichTexture;
 let u_Sampler0, u_Sampler1, u_Sampler2, u_Sampler3, u_Sampler4;
-let camera;  // 使用 Camera 对象管理视角
+let camera;  
 
-// 用于非 pointer lock 拖拽旋转（可选）
 let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
@@ -77,13 +68,12 @@ let g_fishAnimation = false;
 
 let lastFrameTime = performance.now();
 
-// FPS 鼠标旋转灵敏度
+// mouse sensitivity
 const MOUSE_SENSITIVITY = 0.002;
 
-// 关于地图的全局变量（32x32的世界）
+// map size
 let mapSize = 32;
 let g_map = [];
-// 初始化地图：边界为墙（1），内部为空（0）
 for (let i = 0; i < mapSize; i++) {
   let row = [];
   for (let j = 0; j < mapSize; j++) {
@@ -96,55 +86,41 @@ for (let i = 0; i < mapSize; i++) {
   g_map.push(row);
 }
 
-// ================================
-// “Collectibles”（黄色方块）相关全局变量
-// ================================
-let collectibles = [];  // 每个元素是 { pos: [x,y,z], collected: false }
-let collectibleCount = 5;  // 随机生成 5 个
+let collectibles = [];  
+let collectibleCount = 8;  // generate 8 collectibles
 let score = 0;
 
-// 初始化 collectibles：在地图内部（不在边界）随机生成 collectibleCount 个
+// initialize collectibles
 function initCollectibles() {
   collectibles = [];
   for (let i = 0; i < collectibleCount; i++) {
-    // 随机选择行、列（避免边界：从1到mapSize-2）
     let r = Math.floor(Math.random() * (mapSize - 2)) + 1;
     let c = Math.floor(Math.random() * (mapSize - 2)) + 1;
-    // 将地图坐标转换为世界坐标：
-    // 假设每个tile尺寸为：tileSize = 32 / mapSize
     let tileSize = 32 / mapSize;
-    // 计算中心位置（与 drawMap 中的平移类似）：
     let x = r - mapSize / 2 + tileSize/2;
     let z = c - mapSize / 2 + tileSize/2;
-    // 固定 y 坐标（例如设置在地面上方0.5）
     let y = 0.5;
     collectibles.push({ pos: [x, y, z], collected: false });
   }
 }
 
-// 绘制 collectibles（黄色立方体）
-// 使用 Cube 类绘制，但强制使用黄色颜色和无纹理
+// draw collectibles
 function drawCollectibles() {
   let tileSize = 32 / mapSize;
   for (let i = 0; i < collectibles.length; i++) {
     let col = collectibles[i];
     if (!col.collected) {
       let cube = new Cube();
-      cube.color = [1, 1, 0, 1];  // 黄色
-      // 设置 textureNum 为 -2 以使用 u_FragColor（或直接不绑定纹理）
+      cube.color = [1, 1, 0, 1];  // yellow
       cube.textureNum = -2;
-      // 将 Cube 缩放到合适尺寸（例如 tileSize 的一半）
       cube.matrix.scale(tileSize * 0.5, tileSize * 0.5, tileSize * 0.5);
-      // 平移到 collectible 的位置
       cube.matrix.translate(col.pos[0], col.pos[1], col.pos[2]);
       cube.renderfast();
     }
   }
 }
 
-// 检测摄像机是否收集到某个 collectible
 function checkCollectibles() {
-  // 使用摄像机位置（camera.eye）与 collectible 位置比较，使用距离阈值
   let threshold = 0.5;
   for (let i = 0; i < collectibles.length; i++) {
     let col = collectibles[i];
@@ -161,9 +137,7 @@ function checkCollectibles() {
   }
 }
 
-// ===================================
-// WebGL 初始化与 GLSL 变量连接
-// ===================================
+
 function setupWebGL() {
   canvas = document.getElementById('webgl');
   gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
@@ -173,6 +147,7 @@ function setupWebGL() {
   }
   gl.enable(gl.DEPTH_TEST);
 }
+
 
 function connectVariablesToGLSL() {
   if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
@@ -198,9 +173,7 @@ function connectVariablesToGLSL() {
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
 }
 
-// ===================================
-// HTML UI 事件处理（例如滑块、按钮等）
-// ===================================
+
 function addActionForHtmlUI() {
   let angleSlide = document.getElementById('angleSlide');
   if (angleSlide) {
@@ -212,7 +185,7 @@ function addActionForHtmlUI() {
   if (resetBtn) {
     resetBtn.addEventListener('click', resetCamera);
   }
-  // 非 pointer lock 模式下的鼠标拖拽旋转（可选）
+
   canvas.addEventListener("mousedown", function (ev) {
     g_mouseDragging = true;
     g_lastMouseX = ev.clientX;
@@ -231,9 +204,8 @@ function addActionForHtmlUI() {
   });
 }
 
-// ===================================
-// Pointer Lock 设置（FPS 风格鼠标旋转）
-// ===================================
+
+
 function setupPointerLock() {
   canvas.addEventListener("click", function () {
     canvas.requestPointerLock();
@@ -256,9 +228,7 @@ function setupPointerLock() {
   });
 }
 
-// ===================================
-// 纹理加载函数
-// ===================================
+
 function initTextures() {
   let image0 = new Image();
   let image1 = new Image();
@@ -300,34 +270,41 @@ function sendTextureToGLSL(image, texUnit, samplerUniform) {
   console.log("Texture loaded into unit " + (texUnit - gl.TEXTURE0));
 }
 
-// ===================================
-// 键盘事件处理（调用 Camera.handleKeyDown）
-// ===================================
+
+
 function keydown(ev) {
   if (camera.handleKeyDown(ev.key)) {
-    renderScene();
+      renderScene();
+      return;
   }
+
+  let key = ev.key.toLowerCase();
+  if (key === 'z') {
+      addBlockInFront();
+  } else if (key === 'x') {
+      removeBlockInFront();
+  }
+  
+  renderScene();
 }
 
-// ===================================
-// 绘制地图（保持原有逻辑）
-// ===================================
+document.onkeydown = keydown;
+
+
 function drawMap() {
-  let tileSize = 32 / mapSize; // 整个世界尺寸为 32
+  let tileSize = 32 / mapSize;
   for (let x = 0; x < mapSize; x++) {
     for (let z = 0; z < mapSize; z++) {
       let height = g_map[x][z];
       if (height > 0) {
-        // 对于每个格子，根据高度绘制多个 Cube
         for (let y = 0; y < height; y++) {
           let wall = new Cube();
           wall.color = [1, 1, 1, 1];
-          wall.textureNum = 2;  // 绑定 wall.jpg 纹理
+          wall.textureNum = 2;  
           wall.matrix.scale(tileSize, tileSize, tileSize);
-          // 这里将地图索引转换为世界坐标：以地图中心为 (0,0)
           wall.matrix.translate(
             x - mapSize / 2,
-            y - 0.8,  // 可根据需要调整垂直偏移
+            y - 0.8, 
             z - mapSize / 2
           );
           wall.renderfast();
@@ -337,20 +314,16 @@ function drawMap() {
   }
 }
 
-// ===================================
-// 绘制小山（在地图中某一区域生成一座小山）
-// ===================================
+
 function drawMountain() {
-  // 在地图中选择一块区域（例如：索引 20~24行，14~17列）生成小山
   for (let i = 20; i < 25; i++) {
     for (let j = 14; j < 18; j++) {
-      for (let k = 0; k < 2; k++) { // 高度为 2
+      for (let k = 0; k < 2; k++) { 
         let cube = new Cube();
         cube.color = [1, 1, 1, 1];
-        cube.textureNum = 0; // 例如使用墙面纹理
-        let tileSize = 32 / mapSize; // 每个 tile 的尺寸
+        cube.textureNum = 0; 
+        let tileSize = 32 / mapSize; 
         cube.matrix.scale(tileSize, tileSize, tileSize);
-        // 将 i,j 转换为世界坐标：以地图中心为 (0,0)
         cube.matrix.translate(i - mapSize/2, k - 1, j - mapSize/2);
         cube.renderfast();
       }
@@ -360,24 +333,18 @@ function drawMountain() {
 
 
 function renderFishBody() {
-  // 假设每个 tile 的尺寸为 32 / mapSize（本例中为 1）
   let tileSize = 32 / mapSize;
 
-  // 计算小山中心位置（根据 drawMountain() 的生成区域）
+  // position of the mountain
   let mountainCenterX = (20 + 24) / 2 - mapSize / 2; // 6
   let mountainCenterZ = (14 + 18) / 2 - mapSize / 2; // 0
-  let mountainHeight = 2; // 小山高度为 2（单位与 tileSize 相同）
+  let mountainHeight = 2; // height of the mountain
 
-  // 定义鱼的模型变换矩阵
   let fishMatrix = new Matrix4();
-  // 将鱼平移到小山顶（可以根据需要微调 Y 坐标）
   fishMatrix.setTranslate(mountainCenterX, mountainHeight + 0.5, mountainCenterZ);
-  // 放大鱼模型，放大因子根据需要调整，例如 1.5
+
   fishMatrix.scale(8, 8, 8);
   
-  // 如果你的鱼动画（鱼体各部分绘制）在 renderFishBody() 内部已经使用了 fishMatrix，
-  // 那么下面就不需要再额外改变 g_fishPosX, g_fishPosY
-  // 接下来沿用原有鱼体绘制逻辑
 
   let fishHeights = [1, 2, 2.5, 3.5, 5.2, 4.3, 3.5, 2.5, 4.0, 5];
   let fishColors = [
@@ -395,7 +362,6 @@ function renderFishBody() {
   let centerX = startX + 4 * (baseWidth + gap) + baseWidth / 2;
   let decayFactor = 0.6;
   
-  // 使用 fishMatrix 作为基础变换矩阵
   for (let i = 0; i < fishHeights.length; i++) {
       let part = new Cube();
       part.color = fishColors[i] || [0.0, 0.5, 1.0, 1.0];
@@ -429,7 +395,7 @@ function renderFishBody() {
       part.matrix.scale(baseWidth, currentHeight, baseDepth);
       part.render();
   
-      // 绘制鱼的眼睛
+      // eyes
       if (i === 1) {
           let leftEye = new Cube(), rightEye = new Cube();
           leftEye.color = [0.0, 0.0, 0.0, 1.0];
@@ -463,14 +429,13 @@ function renderFishBody() {
 
 
 function drawCollectibles() {
-  // 用 tileSize 作为缩放比例，使其和小山一致
-  let tileSize = 32 / mapSize; // 例如整个世界尺寸为 32
+  let tileSize = 32 / mapSize; // size of each tile
   for (let i = 0; i < collectibles.length; i++) {
     let col = collectibles[i];
     if (!col.collected) {
       let cube = new Cube();
-      cube.color = [1, 1, 0, 1];  // 黄色
-      cube.textureNum = -2;       // 直接使用颜色（不绑定纹理）
+      cube.color = [1, 1, 0, 1];  
+      cube.textureNum = -2;       
       cube.matrix.scale(tileSize, tileSize, tileSize);
       cube.matrix.translate(col.pos[0], col.pos[1], col.pos[2]);
       cube.renderfast();
@@ -478,12 +443,55 @@ function drawCollectibles() {
   }
 }
 
+// fatch front cell
+function getFrontCell() {
+  let cellX = Math.floor(camera.eye[0] + mapSize / 2);
+  let cellZ = Math.floor(camera.eye[2] + mapSize / 2);
 
-// ===================================
-// 检测摄像机与 Collectibles 碰撞（简单距离检测）
-// ===================================
+  let dirX = camera.at[0] - camera.eye[0];
+  let dirZ = camera.at[2] - camera.eye[2];
+
+  let len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+  if (len === 0) return null;
+  
+  dirX /= len;
+  dirZ /= len;
+
+  let frontX = Math.floor(camera.eye[0] + dirX + mapSize / 2);
+  let frontZ = Math.floor(camera.eye[2] + dirZ + mapSize / 2);
+
+  if (frontX < 0 || frontX >= mapSize || frontZ < 0 || frontZ >= mapSize) {
+      return null;
+  }
+
+  return { x: frontX, z: frontZ };
+}
+
+
+// add block in front of the camera
+function addBlockInFront() {
+  let cell = getFrontCell();
+  if (cell) {
+    g_map[cell.x][cell.z] += 1;
+    console.log("Added a block：(" + cell.x + ", " + cell.z + ") New height：" + g_map[cell.x][cell.z]);
+    renderScene();
+  }
+}
+
+// delete block in front of the camera
+function removeBlockInFront() {
+  let cell = getFrontCell();
+  if (cell && g_map[cell.x][cell.z] > 1) { // do not delete the ground
+      g_map[cell.x][cell.z] -= 1;
+      console.log("deleted a block：(" + cell.x + ", " + cell.z + ") New height：" + g_map[cell.x][cell.z]);
+      renderScene();
+  }
+}
+
+
+
 function checkCollectibles() {
-  let threshold = 0.5; // 距离阈值
+  let threshold = 0.5; 
   for (let i = 0; i < collectibles.length; i++) {
     let col = collectibles[i];
     if (!col.collected) {
@@ -499,19 +507,14 @@ function checkCollectibles() {
   }
 }
 
-// ===================================
-// 绘制场景：上传摄像机矩阵，然后调用绘制函数
-// ===================================
+
 function renderScene() {
-  // 使用单位矩阵上传给 u_GlobalRotateMatrix（无额外全局旋转）
   let identity = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, identity.elements);
-  // 上传摄像机的视图与投影矩阵
   gl.uniformMatrix4fv(u_ViewMatrix, false, camera.viewMatrix.elements);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, camera.projectionMatrix.elements);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   
-  // 绘制地板
   let floor = new Cube();
   floor.textureNum = 4;  // dirt.jpg
   floor.matrix.translate(0, -0.75, 0);
@@ -519,7 +522,6 @@ function renderScene() {
   floor.matrix.translate(-0.5, 0, -0.5);
   floor.render();
   
-  // 绘制天空
   let sky = new Cube();
   sky.color = [1, 0, 0, 1];
   sky.textureNum = 3;
@@ -527,28 +529,21 @@ function renderScene() {
   sky.matrix.translate(-0.5, -0.5, -0.5);
   sky.render();
   
-  // 绘制地图
   drawMap();
-  // 绘制小山
   drawMountain();
-  // 绘制 Collectibles（可收集的黄色方块）
   drawCollectibles();
-  // 检查是否有收集到（碰撞检测）
   checkCollectibles();
   renderFishBody();
 }
 
-// ===================================
-// 主循环与入口
-// ===================================
+
 function tick() {
   let now = performance.now();
   let dt = now - lastFrameTime;
   lastFrameTime = now;
-  let fps = 1000 / dt; // 每秒帧数
+  let fps = 1000 / dt; 
 
 
-  // 将 FPS 更新到页面中 id 为 "numdot" 的元素上
   document.getElementById("numdot").innerText = "FPS: " + fps.toFixed(1);
 
   renderScene();
@@ -560,15 +555,7 @@ function click(ev) {
   renderScene();
 }
 
-function keydown(ev) {
-  if (camera.handleKeyDown(ev.key)) {
-    renderScene();
-  }
-}
 
-// ===================================
-// 主函数入口
-// ===================================
 function main() {
   setupWebGL();
   connectVariablesToGLSL();
@@ -577,7 +564,6 @@ function main() {
   
   camera = new Camera();
   
-  // 初始化 collectibles 并重置得分
   initCollectibles();
   score = 0;
   
