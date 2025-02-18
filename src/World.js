@@ -321,6 +321,14 @@ function renderScene() {
   cube3.matrix.setTranslate(1.5, 0, 0);
   cube3.matrix.scale(0.5, 0.5, 0.5);
   cube3.render();
+
+  // Draw the floor
+  let floor = new Cube();
+  floor.textureNum = 1;  // dirt.jpg
+  floor.matrix.translate(0, -0.75, 0);
+  floor.matrix.scale(10, 0, 10);
+  floor.matrix.translate(-0.5, 0, -0.5);
+  floor.render();
 }
 
 function sentTextToHTML(text, htmlID) {
