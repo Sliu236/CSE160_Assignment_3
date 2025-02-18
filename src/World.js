@@ -28,6 +28,7 @@ var FSHADER_SOURCE = `
   uniform sampler2D u_Sampler0;
   uniform sampler2D u_Sampler1;
   uniform sampler2D u_Sampler2;
+  uniform sampler2D u_Sampler3;
   uniform int u_whichTexture;
   void main() {
     if (u_whichTexture == -2) {
@@ -40,6 +41,8 @@ var FSHADER_SOURCE = `
       gl_FragColor = texture2D(u_Sampler1, v_UV);
     } else if (u_whichTexture == 2) {
       gl_FragColor = texture2D(u_Sampler2, v_UV);
+    } else if (u_whichTexture == 3) {
+      gl_FragColor = texture2D(u_Sampler3, v_UV);
     } else {
       gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0);
     }
@@ -59,6 +62,7 @@ let u_whichTexture;
 let u_Sampler0;
 let u_Sampler1;
 let u_Sampler2;
+let u_Sampler3;
 
 let g_globalAngle = 0.0;
 let g_pitchAngle = 0.0; 
@@ -95,6 +99,7 @@ function connectVariablesToGLSL() {
   u_Sampler0 = gl.getUniformLocation(gl.program, 'u_Sampler0');
   u_Sampler1 = gl.getUniformLocation(gl.program, 'u_Sampler1');
   u_Sampler2 = gl.getUniformLocation(gl.program, 'u_Sampler2');
+  u_Sampler3 = gl.getUniformLocation(gl.program, 'u_Sampler3');
 
   let identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -156,8 +161,9 @@ function initTextures() {
   let image0 = new Image();
   let image1 = new Image();
   let image2 = new Image();
+  let image3 = new Image();
 
-  if (!image0 || !image1 || !image2) {
+  if (!image0 || !image1 || !image2 || !image3) {
       console.log('Failed to create image objects');
       return false;
   }
@@ -165,10 +171,12 @@ function initTextures() {
   image0.onload = function() { sendTextureToGLSL(image0, gl.TEXTURE0, u_Sampler0); };
   image1.onload = function() { sendTextureToGLSL(image1, gl.TEXTURE1, u_Sampler1); };
   image2.onload = function() { sendTextureToGLSL(image2, gl.TEXTURE2, u_Sampler2); };
+  image3.onload = function() { sendTextureToGLSL(image3, gl.TEXTURE3, u_Sampler3); };
 
   image0.src = 'sky.jpg';
   image1.src = 'dirt.jpg';
   image2.src = 'grass.jpg';
+  image3.src = 'sky2.jpg';
 
   return true;
 }
@@ -290,6 +298,31 @@ var g_eye = [0, 0, 3];
 var g_look = [0, 0, -100];
 var g_up = [0, 1, 0];
 
+var g_map= [
+  [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 1, 1, 0, 1],
+  [1, 0, 1, 0, 0, 0, 1, 0, 1],
+  [1, 0, 1, 1, 1, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 0, 0, 1, 1, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1, 1]
+];
+
+function drawMap() {
+  for (x=0; x<8; x++){
+    for (y=0; y<8; y++){
+      if (g_map[x][y] == 1){
+        let wall = new Cube();
+        wall.color = [1, 1, 1, 1];
+
+        wall.matrix.translate(x-4, -0.75, y-4);
+        wall.render();
+      }
+    }
+  }
+}
+
 function renderScene() {
   var globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
@@ -329,6 +362,16 @@ function renderScene() {
   floor.matrix.scale(10, 0, 10);
   floor.matrix.translate(-0.5, 0, -0.5);
   floor.render();
+
+  // Draw the sky
+  let sky = new Cube();
+  sky.color = [1, 0, 0, 1];
+  sky.textureNum = 3; 
+  sky.matrix.scale(50, 50, 50);
+  sky.matrix.translate(-0.5, -0.5, -0.5);
+  sky.render(); 
+
+  drawMap();
 }
 
 function sentTextToHTML(text, htmlID) {
