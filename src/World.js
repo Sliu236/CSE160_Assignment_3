@@ -66,6 +66,8 @@ let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
 
+let lastFrameTime = performance.now();
+
 // FPS 鼠标旋转灵敏度
 const MOUSE_SENSITIVITY = 0.002;
 
@@ -426,9 +428,18 @@ function renderScene() {
 // 主循环与入口
 // ===================================
 function tick() {
+  let now = performance.now();
+  let dt = now - lastFrameTime;
+  lastFrameTime = now;
+  let fps = 1000 / dt; // 每秒帧数
+
+  // 将 FPS 更新到页面中 id 为 "numdot" 的元素上
+  document.getElementById("numdot").innerText = "FPS: " + fps.toFixed(1);
+
   renderScene();
   requestAnimationFrame(tick);
 }
+
 
 function click(ev) {
   renderScene();
