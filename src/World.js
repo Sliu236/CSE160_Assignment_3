@@ -66,6 +66,15 @@ let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
 
+let g_fishMoving = false;
+let g_fishPosX = 0.0;
+let g_fishPosY = 0.0;
+let g_bodyBendAngle = 0.0;
+let g_headSwing = 0.0;
+let g_tailSwing = 0.0;
+let g_fishAnimation = false;
+
+
 let lastFrameTime = performance.now();
 
 // FPS 鼠标旋转灵敏度
@@ -349,6 +358,110 @@ function drawMountain() {
   }
 }
 
+
+function renderFishBody() {
+  // 假设每个 tile 的尺寸为 32 / mapSize（本例中为 1）
+  let tileSize = 32 / mapSize;
+
+  // 计算小山中心位置（根据 drawMountain() 的生成区域）
+  let mountainCenterX = (20 + 24) / 2 - mapSize / 2; // 6
+  let mountainCenterZ = (14 + 18) / 2 - mapSize / 2; // 0
+  let mountainHeight = 2; // 小山高度为 2（单位与 tileSize 相同）
+
+  // 定义鱼的模型变换矩阵
+  let fishMatrix = new Matrix4();
+  // 将鱼平移到小山顶（可以根据需要微调 Y 坐标）
+  fishMatrix.setTranslate(mountainCenterX, mountainHeight + 0.5, mountainCenterZ);
+  // 放大鱼模型，放大因子根据需要调整，例如 1.5
+  fishMatrix.scale(8, 8, 8);
+  
+  // 如果你的鱼动画（鱼体各部分绘制）在 renderFishBody() 内部已经使用了 fishMatrix，
+  // 那么下面就不需要再额外改变 g_fishPosX, g_fishPosY
+  // 接下来沿用原有鱼体绘制逻辑
+
+  let fishHeights = [1, 2, 2.5, 3.5, 5.2, 4.3, 3.5, 2.5, 4.0, 5];
+  let fishColors = [
+      [1.0, 0.5, 0.0, 1.0], [1.0, 0.5, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0],
+      [1.0, 0.5, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0],
+      [1.0, 0.5, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.5, 0.0, 1.0],
+      [0.0, 0.0, 0.0, 1.0]
+  ];
+  
+  let baseWidth = 0.08, baseDepth = 0.1, heightFactor = 0.1;
+  let eyeSize = 0.05, eyeOffsetZ = baseDepth / 2;
+  let gap = 0.01, totalWidth = fishHeights.length * (baseWidth + gap);
+  let startX = -totalWidth / 2;
+  let yOffsets = [0, -0.1, -0.15, -0.25, -0.38, -0.30, -0.25, -0.15, -0.3, -0.4];
+  let centerX = startX + 4 * (baseWidth + gap) + baseWidth / 2;
+  let decayFactor = 0.6;
+  
+  // 使用 fishMatrix 作为基础变换矩阵
+  for (let i = 0; i < fishHeights.length; i++) {
+      let part = new Cube();
+      part.color = fishColors[i] || [0.0, 0.5, 1.0, 1.0];
+      part.textureNum = -2;
+  
+      let currentHeight = fishHeights[i] * heightFactor;
+      let xPos = startX + i * (baseWidth + gap) + baseWidth / 2;
+      let yPos = (g_bodyBendAngle > 0) ? yOffsets[4] + fishHeights[4] * heightFactor - currentHeight + 0.3 :
+                 (g_bodyBendAngle < 0) ? yOffsets[4] + 0.2 :
+                 yOffsets[i] + currentHeight / 2;
+  
+      part.matrix = new Matrix4(fishMatrix);
+      part.matrix.translate(xPos, yPos, 0);
+  
+      // Head Swing
+      if (i < 5) {
+          let swingAngle = g_headSwing * Math.pow(decayFactor, i);
+          part.matrix.translate(centerX - xPos, 0, 0);
+          part.matrix.rotate(swingAngle, 0, 1, 0);
+          part.matrix.translate(-(centerX - xPos), 0, 0);
+      }
+  
+      // Tail Swing
+      if (i > 4) {
+          let swingAngle = -g_tailSwing * Math.pow(decayFactor, 9 - i);
+          part.matrix.translate(centerX - xPos, 0, 0);
+          part.matrix.rotate(swingAngle, 0, 1, 0);
+          part.matrix.translate(-(centerX - xPos), 0, 0);
+      }
+    
+      part.matrix.scale(baseWidth, currentHeight, baseDepth);
+      part.render();
+  
+      // 绘制鱼的眼睛
+      if (i === 1) {
+          let leftEye = new Cube(), rightEye = new Cube();
+          leftEye.color = [0.0, 0.0, 0.0, 1.0];
+          rightEye.color = [0.0, 0.0, 0.0, 1.0];
+  
+          let eyeX = xPos, eyeY = yPos + 0.07;
+          let eyeZFront = eyeOffsetZ + 0.04, eyeZBack = -eyeOffsetZ + 0.03;
+          let swingAngle = g_headSwing * Math.pow(decayFactor, 1);
+  
+          leftEye.matrix = new Matrix4(fishMatrix);
+          leftEye.matrix.translate(eyeX, eyeY, eyeZFront);
+          leftEye.matrix.translate(centerX - eyeX, 0, 0);
+          leftEye.matrix.rotate(swingAngle, 0, 1, 0);
+          leftEye.matrix.translate(-(centerX - eyeX), 0, 0);
+          leftEye.matrix.scale(eyeSize, eyeSize, eyeSize * 0.5);
+          leftEye.textureNum = -2;
+          leftEye.render();
+  
+          rightEye.matrix = new Matrix4(fishMatrix);
+          rightEye.matrix.translate(eyeX, eyeY, eyeZBack);
+          rightEye.matrix.translate(centerX - eyeX, 0, 0);
+          rightEye.matrix.rotate(swingAngle, 0, 1, 0);
+          rightEye.matrix.translate(-(centerX - eyeX), 0, 0);
+          rightEye.matrix.scale(eyeSize, eyeSize, eyeSize * 0.5);
+          rightEye.textureNum = -2;
+          rightEye.render();
+      }
+  }
+}
+
+
+
 function drawCollectibles() {
   // 用 tileSize 作为缩放比例，使其和小山一致
   let tileSize = 32 / mapSize; // 例如整个世界尺寸为 32
@@ -422,6 +535,7 @@ function renderScene() {
   drawCollectibles();
   // 检查是否有收集到（碰撞检测）
   checkCollectibles();
+  renderFishBody();
 }
 
 // ===================================
@@ -432,6 +546,7 @@ function tick() {
   let dt = now - lastFrameTime;
   lastFrameTime = now;
   let fps = 1000 / dt; // 每秒帧数
+
 
   // 将 FPS 更新到页面中 id 为 "numdot" 的元素上
   document.getElementById("numdot").innerText = "FPS: " + fps.toFixed(1);
