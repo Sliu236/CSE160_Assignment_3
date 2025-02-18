@@ -59,15 +59,96 @@ let a_Position, a_UV;
 let u_FragColor, u_ModelMatrix, u_ProjectionMatrix, u_GlobalRotateMatrix, u_ViewMatrix;
 let u_whichTexture;
 let u_Sampler0, u_Sampler1, u_Sampler2, u_Sampler3, u_Sampler4;
-let camera;  // Camera 对象用于管理视角
+let camera;  // 使用 Camera 对象管理视角
 
 // 用于非 pointer lock 拖拽旋转（可选）
 let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
 
-// 用于 FPS 鼠标控制时的灵敏度
+// FPS 鼠标旋转灵敏度
 const MOUSE_SENSITIVITY = 0.002;
+
+// 关于地图的全局变量（32x32的世界）
+let mapSize = 32;
+let g_map = [];
+// 初始化地图：边界为墙（1），内部为空（0）
+for (let i = 0; i < mapSize; i++) {
+  let row = [];
+  for (let j = 0; j < mapSize; j++) {
+    if (i === 0 || i === mapSize - 1 || j === 0 || j === mapSize - 1) {
+      row.push(1);
+    } else {
+      row.push(0);
+    }
+  }
+  g_map.push(row);
+}
+
+// ================================
+// “Collectibles”（黄色方块）相关全局变量
+// ================================
+let collectibles = [];  // 每个元素是 { pos: [x,y,z], collected: false }
+let collectibleCount = 5;  // 随机生成 5 个
+let score = 0;
+
+// 初始化 collectibles：在地图内部（不在边界）随机生成 collectibleCount 个
+function initCollectibles() {
+  collectibles = [];
+  for (let i = 0; i < collectibleCount; i++) {
+    // 随机选择行、列（避免边界：从1到mapSize-2）
+    let r = Math.floor(Math.random() * (mapSize - 2)) + 1;
+    let c = Math.floor(Math.random() * (mapSize - 2)) + 1;
+    // 将地图坐标转换为世界坐标：
+    // 假设每个tile尺寸为：tileSize = 32 / mapSize
+    let tileSize = 32 / mapSize;
+    // 计算中心位置（与 drawMap 中的平移类似）：
+    let x = r - mapSize / 2 + tileSize/2;
+    let z = c - mapSize / 2 + tileSize/2;
+    // 固定 y 坐标（例如设置在地面上方0.5）
+    let y = 0.5;
+    collectibles.push({ pos: [x, y, z], collected: false });
+  }
+}
+
+// 绘制 collectibles（黄色立方体）
+// 使用 Cube 类绘制，但强制使用黄色颜色和无纹理
+function drawCollectibles() {
+  let tileSize = 32 / mapSize;
+  for (let i = 0; i < collectibles.length; i++) {
+    let col = collectibles[i];
+    if (!col.collected) {
+      let cube = new Cube();
+      cube.color = [1, 1, 0, 1];  // 黄色
+      // 设置 textureNum 为 -2 以使用 u_FragColor（或直接不绑定纹理）
+      cube.textureNum = -2;
+      // 将 Cube 缩放到合适尺寸（例如 tileSize 的一半）
+      cube.matrix.scale(tileSize * 0.5, tileSize * 0.5, tileSize * 0.5);
+      // 平移到 collectible 的位置
+      cube.matrix.translate(col.pos[0], col.pos[1], col.pos[2]);
+      cube.renderfast();
+    }
+  }
+}
+
+// 检测摄像机是否收集到某个 collectible
+function checkCollectibles() {
+  // 使用摄像机位置（camera.eye）与 collectible 位置比较，使用距离阈值
+  let threshold = 0.5;
+  for (let i = 0; i < collectibles.length; i++) {
+    let col = collectibles[i];
+    if (!col.collected) {
+      let dx = camera.eye[0] - col.pos[0];
+      let dz = camera.eye[2] - col.pos[2];
+      let dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < threshold) {
+        col.collected = true;
+        score++;
+        console.log("Score: " + score);
+      }
+    }
+  }
+}
 
 // ===================================
 // WebGL 初始化与 GLSL 变量连接
@@ -110,7 +191,6 @@ function connectVariablesToGLSL() {
 // HTML UI 事件处理（例如滑块、按钮等）
 // ===================================
 function addActionForHtmlUI() {
-  // 假设 HTML 中有 id="angleSlide" 和 id="ResetCameraButton"
   let angleSlide = document.getElementById('angleSlide');
   if (angleSlide) {
     angleSlide.addEventListener('input', function () {
@@ -121,7 +201,7 @@ function addActionForHtmlUI() {
   if (resetBtn) {
     resetBtn.addEventListener('click', resetCamera);
   }
-  // 可选：非 pointer lock 模式下的鼠标拖拽旋转
+  // 非 pointer lock 模式下的鼠标拖拽旋转（可选）
   canvas.addEventListener("mousedown", function (ev) {
     g_mouseDragging = true;
     g_lastMouseX = ev.clientX;
@@ -130,7 +210,6 @@ function addActionForHtmlUI() {
   canvas.addEventListener("mousemove", function (ev) {
     if (g_mouseDragging) {
       let dx = ev.clientX - g_lastMouseX;
-      // 这里只处理水平旋转
       camera.panLeft(dx * 0.05);
       g_lastMouseX = ev.clientX;
       renderScene();
@@ -159,7 +238,6 @@ function setupPointerLock() {
     if (document.pointerLockElement !== canvas) return;
     camera.yaw += ev.movementX * MOUSE_SENSITIVITY;
     camera.pitch -= ev.movementY * MOUSE_SENSITIVITY;
-    // 限制 pitch 在 [-π/2, π/2] 内
     camera.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.pitch));
     camera.updateDirection();
     camera.updateViewMatrix();
@@ -185,7 +263,7 @@ function initTextures() {
   image2.onload = function() { sendTextureToGLSL(image2, gl.TEXTURE2, u_Sampler2); };
   image3.onload = function() { sendTextureToGLSL(image3, gl.TEXTURE3, u_Sampler3); };
   image4.onload = function() { sendTextureToGLSL(image4, gl.TEXTURE4, u_Sampler4); };
-  image0.src = 'sky.jpg';
+  image0.src = 'brick.webp';
   image1.src = 'dirt.jpg';
   image2.src = 'grass.jpg';
   image3.src = 'sky2.jpg';
@@ -221,63 +299,104 @@ function keydown(ev) {
 }
 
 // ===================================
-// 示例：绘制地图（你可以在此处加入其他绘制调用）
+// 绘制地图（保持原有逻辑）
 // ===================================
 function drawMap() {
-  // 定义 32×32 的地图数据，边界为墙（值为 1），内部为空（值为 0）
-  let mapSize = 32;
-  let g_map = [];
-  for (let i = 0; i < mapSize; i++) {
-    let row = [];
-    for (let j = 0; j < mapSize; j++) {
-      // 如果是边界位置，则设为墙（1），否则设为 0
-      if (i === 0 || i === mapSize - 1 || j === 0 || j === mapSize - 1) {
-        row.push(1);
-      } else {
-        row.push(0);
+  let tileSize = 32 / mapSize; // 整个世界尺寸为 32
+  for (let x = 0; x < mapSize; x++) {
+    for (let z = 0; z < mapSize; z++) {
+      let height = g_map[x][z];
+      if (height > 0) {
+        // 对于每个格子，根据高度绘制多个 Cube
+        for (let y = 0; y < height; y++) {
+          let wall = new Cube();
+          wall.color = [1, 1, 1, 1];
+          wall.textureNum = 2;  // 绑定 wall.jpg 纹理
+          wall.matrix.scale(tileSize, tileSize, tileSize);
+          // 这里将地图索引转换为世界坐标：以地图中心为 (0,0)
+          wall.matrix.translate(
+            x - mapSize / 2,
+            y - 0.8,  // 可根据需要调整垂直偏移
+            z - mapSize / 2
+          );
+          wall.renderfast();
+        }
       }
     }
-    g_map.push(row);
   }
+}
 
-  // 根据地图大小计算每个 tile 的尺寸（假设地板总尺寸为32）
-  let tileSize = 32 / mapSize;
-
-  // 遍历地图数组，绘制墙壁（值大于0的单元格）
-  for (let x = 0; x < mapSize; x++) {
-    for (let y = 0; y < mapSize; y++) {
-      if (g_map[x][y] > 0) {
-        let wall = new Cube();
-        wall.color = [1, 1, 1, 1];
-        wall.textureNum = 2;  // 绑定 wall.jpg 纹理
-
-        let height = g_map[x][y]; // 此处高度为1
-
-        // 缩放 cube 以适应单元格尺寸
-        wall.matrix.scale(tileSize, height * tileSize, tileSize);
-        // 将立方体放置到对应位置，注意根据地图中心调整位置
-        wall.matrix.translate(x - mapSize / 2, (height * tileSize) / 2 - 1.5, y - mapSize / 2);
-        wall.renderfast();
+// ===================================
+// 绘制小山（在地图中某一区域生成一座小山）
+// ===================================
+function drawMountain() {
+  // 在地图中选择一块区域（例如：索引 20~24行，14~17列）生成小山
+  for (let i = 20; i < 25; i++) {
+    for (let j = 14; j < 18; j++) {
+      for (let k = 0; k < 2; k++) { // 高度为 2
+        let cube = new Cube();
+        cube.color = [1, 1, 1, 1];
+        cube.textureNum = 0; // 例如使用墙面纹理
+        let tileSize = 32 / mapSize; // 每个 tile 的尺寸
+        cube.matrix.scale(tileSize, tileSize, tileSize);
+        // 将 i,j 转换为世界坐标：以地图中心为 (0,0)
+        cube.matrix.translate(i - mapSize/2, k - 1, j - mapSize/2);
+        cube.renderfast();
       }
+    }
+  }
+}
+
+function drawCollectibles() {
+  // 用 tileSize 作为缩放比例，使其和小山一致
+  let tileSize = 32 / mapSize; // 例如整个世界尺寸为 32
+  for (let i = 0; i < collectibles.length; i++) {
+    let col = collectibles[i];
+    if (!col.collected) {
+      let cube = new Cube();
+      cube.color = [1, 1, 0, 1];  // 黄色
+      cube.textureNum = -2;       // 直接使用颜色（不绑定纹理）
+      cube.matrix.scale(tileSize, tileSize, tileSize);
+      cube.matrix.translate(col.pos[0], col.pos[1], col.pos[2]);
+      cube.renderfast();
     }
   }
 }
 
 
 // ===================================
+// 检测摄像机与 Collectibles 碰撞（简单距离检测）
+// ===================================
+function checkCollectibles() {
+  let threshold = 0.5; // 距离阈值
+  for (let i = 0; i < collectibles.length; i++) {
+    let col = collectibles[i];
+    if (!col.collected) {
+      let dx = camera.eye[0] - col.pos[0];
+      let dz = camera.eye[2] - col.pos[2];
+      let dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < threshold) {
+        col.collected = true;
+        score++;
+        console.log("Score: " + score);
+      }
+    }
+  }
+}
+
+// ===================================
 // 绘制场景：上传摄像机矩阵，然后调用绘制函数
 // ===================================
 function renderScene() {
-  // 使用单位矩阵传给 u_GlobalRotateMatrix（无额外全局旋转）
+  // 使用单位矩阵上传给 u_GlobalRotateMatrix（无额外全局旋转）
   let identity = new Matrix4();
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, identity.elements);
   // 上传摄像机的视图与投影矩阵
   gl.uniformMatrix4fv(u_ViewMatrix, false, camera.viewMatrix.elements);
   gl.uniformMatrix4fv(u_ProjectionMatrix, false, camera.projectionMatrix.elements);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-
-    // Draw the floor
+  
+  // 绘制地板
   let floor = new Cube();
   floor.textureNum = 4;  // dirt.jpg
   floor.matrix.translate(0, -0.75, 0);
@@ -285,16 +404,22 @@ function renderScene() {
   floor.matrix.translate(-0.5, 0, -0.5);
   floor.render();
   
-    // Draw the sky
+  // 绘制天空
   let sky = new Cube();
   sky.color = [1, 0, 0, 1];
-  sky.textureNum = 3; 
+  sky.textureNum = 3;
   sky.matrix.scale(50, 50, 50);
   sky.matrix.translate(-0.5, -0.5, -0.5);
-  sky.render(); 
+  sky.render();
   
-  // 调用你的绘制函数，例如 drawMap()
+  // 绘制地图
   drawMap();
+  // 绘制小山
+  drawMountain();
+  // 绘制 Collectibles（可收集的黄色方块）
+  drawCollectibles();
+  // 检查是否有收集到（碰撞检测）
+  checkCollectibles();
 }
 
 // ===================================
@@ -309,16 +434,33 @@ function click(ev) {
   renderScene();
 }
 
+function keydown(ev) {
+  if (camera.handleKeyDown(ev.key)) {
+    renderScene();
+  }
+}
+
+// ===================================
+// 主函数入口
+// ===================================
 function main() {
   setupWebGL();
   connectVariablesToGLSL();
   addActionForHtmlUI();
   setupPointerLock();
+  
   camera = new Camera();
+  
+  // 初始化 collectibles 并重置得分
+  initCollectibles();
+  score = 0;
+  
   document.onkeydown = keydown;
   canvas.onmousedown = click;
   canvas.onmousemove = function(ev) { if (ev.buttons === 1) click(ev); };
+  
   initTextures();
+  
   gl.clearColor(0, 0, 0, 1.0);
   requestAnimationFrame(tick);
 }
