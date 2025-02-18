@@ -1,149 +1,154 @@
-class Vector {
-    constructor(arr) {
-      // 保存为数组形式
-      this.elements = arr.slice(); // 深拷贝
-    }
-    // 返回 this - b（不改变 this 和 b）
-    subtract(b) {
-      return new Vector([
-        this.elements[0] - b.elements[0],
-        this.elements[1] - b.elements[1],
-        this.elements[2] - b.elements[2]
-      ]);
-    }
-    // 返回 this + b
-    add(b) {
-      return new Vector([
-        this.elements[0] + b.elements[0],
-        this.elements[1] + b.elements[1],
-        this.elements[2] + b.elements[2]
-      ]);
-    }
-    // 返回 this 除以标量 scalar
-    divide(scalar) {
-      return new Vector([
-        this.elements[0] / scalar,
-        this.elements[1] / scalar,
-        this.elements[2] / scalar
-      ]);
-    }
-    // 返回 this 乘以标量 scalar
-    multiply(scalar) {
-      return new Vector([
-        this.elements[0] * scalar,
-        this.elements[1] * scalar,
-        this.elements[2] * scalar
-      ]);
-    }
-    // 返回 this · b
-    dot(b) {
-      return this.elements[0]*b.elements[0] +
-             this.elements[1]*b.elements[1] +
-             this.elements[2]*b.elements[2];
-    }
-    // 返回 this x b
-    cross(b) {
-      return new Vector([
-        this.elements[1]*b.elements[2] - this.elements[2]*b.elements[1],
-        this.elements[2]*b.elements[0] - this.elements[0]*b.elements[2],
-        this.elements[0]*b.elements[1] - this.elements[1]*b.elements[0]
-      ]);
-    }
-    // 返回向量长度
-    length() {
-      return Math.sqrt(this.dot(this));
-    }
+// Camera.js
+class Camera {
+  constructor() {
+    // 摄像机参数
+    // 初始位置：模拟人视角的高度
+    this.eye = [0, 1.5, 5];  
+    this.at  = [0, 1.5, 0];
+    this.up  = [0, 1, 0];
+
+    // 视野参数
+    this.fov = 60;
+    this.aspect = 1; // 之后在 updateProjectionMatrix 中设置
+    this.near = 0.1;
+    this.far  = 100;
+
+    // 速度参数
+    this.moveSpeed = 0.2;
+    this.rotateSpeed = 2; // 旋转角速度（单位：度）
+
+    // 初始化视图矩阵和投影矩阵
+    this.viewMatrix = new Matrix4();
+    this.projectionMatrix = new Matrix4();
+    this.updateViewMatrix();
+    this.updateProjectionMatrix();
   }
 
+  // 更新视图矩阵：调用 setLookAt 并上传到 GLSL
+  updateViewMatrix() {
+    let viewMatrix = new Matrix4();
+    viewMatrix.setLookAt(
+      this.eye[0], this.eye[1], this.eye[2],
+      this.at[0],  this.at[1],  this.at[2],
+      this.up[0],  this.up[1],  this.up[2]
+    );
+    gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
+    this.viewMatrix = viewMatrix;
+  }
 
-class Camera {
-    constructor() {
-        this.eye = new Vector([0, 0, 3]);
-        this.at = new Vector([0, 0, -100]);
-        this.up = new Vector([0, 1, 0]);
+  // 更新投影矩阵
+  updateProjectionMatrix() {
+    this.aspect = canvas.width / canvas.height;
+    let projMatrix = new Matrix4();
+    projMatrix.setPerspective(this.fov, this.aspect, this.near, this.far);
+    gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMatrix.elements);
+    this.projectionMatrix = projMatrix;
+  }
+
+  // 向前移动：在水平面上移动（忽略 Y 方向）
+  moveForward() {
+    // 计算水平前向向量 = at - eye（忽略 Y 分量）
+    let forward = [
+      this.at[0] - this.eye[0],
+      0,
+      this.at[2] - this.eye[2]
+    ];
+    let len = Math.hypot(forward[0], forward[2]);
+    if (len > 0) {
+      forward[0] /= len;
+      forward[2] /= len;
     }
+    this.eye[0] += forward[0] * this.moveSpeed;
+    this.eye[2] += forward[2] * this.moveSpeed;
+    this.at[0]  += forward[0] * this.moveSpeed;
+    this.at[2]  += forward[2] * this.moveSpeed;
+    this.updateViewMatrix();
+  }
 
-    // 前进：f = at - eye
-    forward() {
-        var f = this.at.subtract(this.eye);
-        f = f.divide(f.length());
-        this.at = this.at.add(f);
-        this.eye = this.eye.add(f);
+  // 向后移动
+  moveBackward() {
+    let forward = [
+      this.at[0] - this.eye[0],
+      0,
+      this.at[2] - this.eye[2]
+    ];
+    let len = Math.hypot(forward[0], forward[2]);
+    if (len > 0) {
+      forward[0] /= len;
+      forward[2] /= len;
     }
+    // 后退即沿前向的反方向
+    this.eye[0] -= forward[0] * this.moveSpeed;
+    this.eye[2] -= forward[2] * this.moveSpeed;
+    this.at[0]  -= forward[0] * this.moveSpeed;
+    this.at[2]  -= forward[2] * this.moveSpeed;
+    this.updateViewMatrix();
+  }
 
-    // 后退
-    back() {
-        // 这里疑似有个小笔误，应该是：
-        // var f = this.at.subtract(this.eye);
-        var f = this.at.subtract(this.eye);
-        f = f.divide(f.length());
-        this.at = this.at.subtract(f);
-        this.eye = this.eye.subtract(f);
+  // 向左移动：这里简化为直接将 x 坐标减小
+  moveLeft() {
+    this.eye[0] -= this.moveSpeed;
+    this.at[0]  -= this.moveSpeed;
+    this.updateViewMatrix();
+  }
+
+  // 向右移动
+  moveRight() {
+    this.eye[0] += this.moveSpeed;
+    this.at[0]  += this.moveSpeed;
+    this.updateViewMatrix();
+  }
+
+  // 向左旋转（偏航）：绕 up 轴旋转 rotateSpeed 度
+  panLeft() {
+    const alpha = this.rotateSpeed;
+    // 计算前向向量 f = at - eye
+    let f = [
+      this.at[0] - this.eye[0],
+      this.at[1] - this.eye[1],
+      this.at[2] - this.eye[2]
+    ];
+    let rotationMatrix = new Matrix4();
+    rotationMatrix.setRotate(alpha, this.up[0], this.up[1], this.up[2]);
+    // 计算旋转后的 f'
+    let f_prime = rotationMatrix.multiplyVector3(new Vector3(f));
+    // 更新 at = eye + f'
+    this.at[0] = this.eye[0] + f_prime.elements[0];
+    this.at[1] = this.eye[1] + f_prime.elements[1];
+    this.at[2] = this.eye[2] + f_prime.elements[2];
+    this.updateViewMatrix();
+  }
+
+  // 向右旋转
+  panRight() {
+    const alpha = -this.rotateSpeed;
+    let f = [
+      this.at[0] - this.eye[0],
+      this.at[1] - this.eye[1],
+      this.at[2] - this.eye[2]
+    ];
+    let rotationMatrix = new Matrix4();
+    rotationMatrix.setRotate(alpha, this.up[0], this.up[1], this.up[2]);
+    let f_prime = rotationMatrix.multiplyVector3(new Vector3(f));
+    this.at[0] = this.eye[0] + f_prime.elements[0];
+    this.at[1] = this.eye[1] + f_prime.elements[1];
+    this.at[2] = this.eye[2] + f_prime.elements[2];
+    this.updateViewMatrix();
+  }
+
+  // 处理键盘输入
+  handleKeyDown(key) {
+    switch (key.toLowerCase()) {
+      case 'w': this.moveForward(); return true;
+      case 's': this.moveBackward(); return true;
+      case 'a': this.moveLeft(); return true;
+      case 'd': this.moveRight(); return true;
+      case 'q': this.panLeft(); return true;
+      case 'e': this.panRight(); return true;
+      default: return false;
     }
-
-    // 向左平移（left）：基于现有写法
-    left() {
-        var f = this.eye.subtract(this.at);  // 计算前向向量
-        f = f.divide(f.length());
-        var s = f.cross(this.up);            // s = f x up（或 up x f，取决于你想要的方向）
-        s = s.divide(s.length());
-        this.at = this.at.add(s);
-        this.eye = this.eye.add(s);
-    }
-
-    // 向右平移（right）：与 left 相反
-    right() {
-        var f = this.eye.subtract(this.at);
-        f = f.divide(f.length());
-        // 如果 left 用的是 s = f.cross(up)，那么 right 可以用 s = up.cross(f)
-        // 或者直接在最终加/减 s 时反向操作
-        var s = this.up.cross(f);  
-        s = s.divide(s.length());
-        // 这里与 left 相反，所以我们做 subtract
-        this.at = this.at.subtract(s);
-        this.eye = this.eye.subtract(s);
-    }
-
-    // 视角左转（Q 键）：绕 up 向量做小角度旋转
-    panLeft(angleDeg) {
-        // 计算前向向量 f = at - eye
-        let f = this.at.subtract(this.eye);
-        // 将角度转换成弧度
-        let rad = angleDeg * Math.PI / 180.0;
-
-        // 这里假设你没有 Matrix4，可以用简单的 Rodrigues' rotation formula，
-        // 或自己定义一个 rotateAroundAxis() 方法。
-        // 为简洁，下面演示一个“近似”写法，用 cross + dot 进行旋转：
-        
-        // 1) 先归一化 up
-        let u = this.up.divide(this.up.length());
-        // 2) f 平行于 up 的分量 & 垂直于 up 的分量
-        let parallel = u.multiply(f.dot(u));          // f 在 up 方向上的分量
-        let perp    = f.subtract(parallel);           // 垂直于 up 的分量
-        // 3) 对 perp 分量进行平面内旋转
-        // perp 旋转 angleDeg => perp*cos(rad) + (u x perp)*sin(rad)
-        let w = u.cross(perp);                        // 垂直于 perp 的向量
-        // perp'
-        let perpPrime = perp.multiply(Math.cos(rad)).add(w.multiply(Math.sin(rad)));
-        // 新的 f = parallel + perp'
-        let fPrime = parallel.add(perpPrime);
-
-        // 更新 at = eye + fPrime
-        this.at = this.eye.add(fPrime);
-    }
-
-    // 视角右转（E 键）：绕 up 反向旋转
-    panRight(angleDeg) {
-        let f = this.at.subtract(this.eye);
-        let rad = angleDeg * Math.PI / 180.0;
-        
-        let u = this.up.divide(this.up.length());
-        let parallel = u.multiply(f.dot(u));
-        let perp = f.subtract(parallel);
-        let w = u.cross(perp);
-        // 这里旋转 -angleDeg => cos(-θ)=cos(θ), sin(-θ)=-sin(θ)
-        let perpPrime = perp.multiply(Math.cos(-rad)).add(w.multiply(Math.sin(-rad)));
-        let fPrime = parallel.add(perpPrime);
-        this.at = this.eye.add(fPrime);
-    }
+  }
 }
+
+
+

@@ -29,6 +29,7 @@ var FSHADER_SOURCE = `
   uniform sampler2D u_Sampler1;
   uniform sampler2D u_Sampler2;
   uniform sampler2D u_Sampler3;
+  uniform sampler2D u_Sampler4;
   uniform int u_whichTexture;
   void main() {
     if (u_whichTexture == -2) {
@@ -43,6 +44,8 @@ var FSHADER_SOURCE = `
       gl_FragColor = texture2D(u_Sampler2, v_UV);
     } else if (u_whichTexture == 3) {
       gl_FragColor = texture2D(u_Sampler3, v_UV);
+    } else if (u_whichTexture == 4) {
+      gl_FragColor = texture2D(u_Sampler4, v_UV);
     } else {
       gl_FragColor = vec4(1.0, 0.2, 0.2, 1.0);
     }
@@ -59,13 +62,14 @@ let u_ProjectionMatrix;
 let u_GlobalRotateMatrix;
 let u_ViewMatrix;
 let u_whichTexture;
+let camera;
 let u_Sampler0;
 let u_Sampler1;
 let u_Sampler2;
 let u_Sampler3;
-
+let u_Sampler4;
+  
 let g_globalAngle = 0.0;
-let g_pitchAngle = 0.0; 
 let g_mouseDragging = false;
 let g_lastMouseX = 0;
 let g_lastMouseY = 0;
@@ -81,7 +85,7 @@ function setupWebGL() {
     gl.enable(gl.DEPTH_TEST);
 }
 
-function connectVariablesToGLSL() { 
+function connectVariablesToGLSL() {
   if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
       console.log('Failed to initialize shaders.');
       return;
@@ -100,6 +104,7 @@ function connectVariablesToGLSL() {
   u_Sampler1 = gl.getUniformLocation(gl.program, 'u_Sampler1');
   u_Sampler2 = gl.getUniformLocation(gl.program, 'u_Sampler2');
   u_Sampler3 = gl.getUniformLocation(gl.program, 'u_Sampler3');
+  u_Sampler4 = gl.getUniformLocation(gl.program, 'u_Sampler4');
 
   let identityM = new Matrix4();
   gl.uniformMatrix4fv(u_ModelMatrix, false, identityM.elements);
@@ -115,44 +120,32 @@ function convertCoordinatesEventToGL(ev) {
 }
 
 function addActionForHtmlUI() {
-  // Yaw
-  document.getElementById('angleSlide').addEventListener('input', function() { 
-      g_globalAngle = parseFloat(this.value); 
-      renderScene();
-  });
-  // Pitch
-  document.getElementById('pitchSlide').addEventListener('input', function() { 
-      g_pitchAngle = parseFloat(this.value);
+  document.getElementById('angleSlide').addEventListener('input', function () {
+      g_globalAngle = parseFloat(this.value);
       renderScene();
   });
 
-  // Reset Camera
   document.getElementById('ResetCameraButton').addEventListener('click', resetCamera);
 
-  // drag mouse to rotate camera
   canvas.addEventListener("mousedown", function (ev) {
-      g_mouseDragging = true; 
-      g_lastMouseX = ev.clientX; 
+      g_mouseDragging = true;
+      g_lastMouseX = ev.clientX;
       g_lastMouseY = ev.clientY;
   });
 
-  // camera rotate
   canvas.addEventListener("mousemove", function (ev) {
       if (g_mouseDragging) {
           let dx = ev.clientX - g_lastMouseX;
           let dy = ev.clientY - g_lastMouseY;
           g_globalAngle += dx * 0.5;
-          g_pitchAngle -= dy * 0.5;
-          g_pitchAngle = Math.max(-90, Math.min(90, g_pitchAngle));
           g_lastMouseX = ev.clientX;
           g_lastMouseY = ev.clientY;
           renderScene();
       }
   });
 
-  // stop camera rotate
-  canvas.addEventListener("mouseup", function () { 
-      g_mouseDragging = false; 
+  canvas.addEventListener("mouseup", function () {
+      g_mouseDragging = false;
   });
 }
 
@@ -162,8 +155,9 @@ function initTextures() {
   let image1 = new Image();
   let image2 = new Image();
   let image3 = new Image();
+  let image4 = new Image();
 
-  if (!image0 || !image1 || !image2 || !image3) {
+  if (!image0 || !image1 || !image2 || !image3 || !image4) {
       console.log('Failed to create image objects');
       return false;
   }
@@ -172,11 +166,13 @@ function initTextures() {
   image1.onload = function() { sendTextureToGLSL(image1, gl.TEXTURE1, u_Sampler1); };
   image2.onload = function() { sendTextureToGLSL(image2, gl.TEXTURE2, u_Sampler2); };
   image3.onload = function() { sendTextureToGLSL(image3, gl.TEXTURE3, u_Sampler3); };
+  image4.onload = function() { sendTextureToGLSL(image4, gl.TEXTURE4, u_Sampler4); };
 
   image0.src = 'sky.jpg';
   image1.src = 'dirt.jpg';
   image2.src = 'grass.jpg';
   image3.src = 'sky2.jpg';
+  image4.src = 'grass2.jpg';
 
   return true;
 }
@@ -211,6 +207,7 @@ function main() {
   connectVariablesToGLSL(); 
   addActionForHtmlUI();
 
+  camera = new Camera();
   
   canvas.onmousedown = click;
   canvas.onmousemove  = function(ev) { if (ev.buttons === 1) click(ev); };
@@ -239,101 +236,60 @@ function click(ev) {
 }
 
 function keydown(ev) {
-  let speed = 0.2;
-  // W: 前进 (沿 -Z 方向)
-  if (ev.keyCode === 87) {
-    g_eye[2] -= speed;
-    g_look[2] -= speed;
+  if (camera.handleKeyDown(ev.key)) {
+    renderScene();
   }
-  // S: 后退 (沿 +Z 方向)
-  else if (ev.keyCode === 83) {
-    g_eye[2] += speed;
-    g_look[2] += speed;
-  }
-  // A: 向左 (沿 -X 方向)
-  else if (ev.keyCode === 65) {
-    g_eye[0] -= speed;
-    g_look[0] -= speed;
-  }
-  // D: 向右 (沿 +X 方向)
-  else if (ev.keyCode === 68) {
-    g_eye[0] += speed;
-    g_look[0] += speed;
-  }
-  // Q: 视角左转 (绕 up 轴旋转 +5°)
-  else if (ev.keyCode === 81) {
-    let f = new Vector3(g_look); 
-    f.sub(new Vector3(g_eye));          // f = g_look - g_eye
-    let rot = new Matrix4();
-    rot.setRotate(5, g_up[0], g_up[1], g_up[2]);
-    f = rot.multiplyVector3(f);
-    // 更新 g_look = g_eye + f
-    g_look = [
-      g_eye[0] + f.elements[0],
-      g_eye[1] + f.elements[1],
-      g_eye[2] + f.elements[2]
-    ];
-  }
-  // E: 视角右转 (绕 up 轴旋转 -5°)
-  else if (ev.keyCode === 69) {
-    let f = new Vector3(g_look);
-    f.sub(new Vector3(g_eye));          // f = g_look - g_eye
-    let rot = new Matrix4();
-    rot.setRotate(-5, g_up[0], g_up[1], g_up[2]);
-    f = rot.multiplyVector3(f);
-    g_look = [
-      g_eye[0] + f.elements[0],
-      g_eye[1] + f.elements[1],
-      g_eye[2] + f.elements[2]
-    ];
-  }
-
-  renderScene();
-  console.log(ev.keyCode);
 }
 
 
 
-var g_eye = [0, 0, 3];
-var g_look = [0, 0, -100];
-var g_up = [0, 1, 0];
-
 var g_map= [
   [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0.7, 0.8, 0.5, 0, 0, 0, 0, 1],
+  [1, 0.6, 0.7, 0.4, 0, 0, 0, 0, 1],
+  [1, 0.6, 0.5, 0, 0, 0, 0, 0, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 1, 1, 1, 1, 1, 0, 1],
-  [1, 0, 1, 0, 0, 0, 1, 0, 1],
-  [1, 0, 1, 1, 1, 1, 1, 0, 1],
   [1, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 0, 1, 0, 0, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 0, 0, 1],
   [1, 1, 1, 1, 1, 1, 1, 1, 1]
 ];
 
 function drawMap() {
-  for (x=0; x<8; x++){
-    for (y=0; y<8; y++){
-      if (g_map[x][y] == 1){
+  let mapSize = g_map.length;    // 地图大小 (32x32)
+  let tileSize = 32 / mapSize;   // 计算每个单元格的大小，使其适应 32x32 的地板
+
+  for (let x = 0; x < g_map.length; x++) {
+    for (let y = 0; y < g_map[x].length; y++) {
+      if (g_map[x][y] > 0) {  // 只绘制墙壁
         let wall = new Cube();
         wall.color = [1, 1, 1, 1];
+        wall.textureNum = 2;  // 绑定 wall.jpg 纹理
 
-        wall.matrix.translate(x-4, -0.75, y-4);
-        wall.render();
+        let height = g_map[x][y]; // 获取墙的高度 (1 或 2)
+        
+        // 适应地板大小
+        wall.matrix.scale(tileSize, height * tileSize, tileSize); // Y 轴缩放成 height 倍
+        
+        // 计算 X、Y、Z 位置
+        wall.matrix.translate(x - mapSize / 2, (height * tileSize) / 2 - 2.16, y - mapSize / 2);
+
+        
+        wall.renderfast();
       }
     }
   }
 }
 
+
+
+
 function renderScene() {
-  var globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0);
+  let globalRotMat = new Matrix4().rotate(g_globalAngle, 0, 1, 0);
   gl.uniformMatrix4fv(u_GlobalRotateMatrix, false, globalRotMat.elements);
 
-  let viewMatrix = new Matrix4();
-  viewMatrix.setLookAt(g_eye[0], g_eye[1], g_eye[2], g_look[0], g_look[1], g_look[2], g_up[0], g_up[1], g_up[2]);
-  gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
-
-  let projMatrix = new Matrix4();
-  projMatrix.setPerspective(60, canvas.width / canvas.height, 0.1, 100);
-  gl.uniformMatrix4fv(u_ProjectionMatrix, false, projMatrix.elements);
+  // 直接使用 camera 内部的视图和投影矩阵
+  gl.uniformMatrix4fv(u_ViewMatrix, false, camera.viewMatrix.elements);
+  gl.uniformMatrix4fv(u_ProjectionMatrix, false, camera.projectionMatrix.elements);
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -357,9 +313,9 @@ function renderScene() {
 
   // Draw the floor
   let floor = new Cube();
-  floor.textureNum = 1;  // dirt.jpg
+  floor.textureNum = 4;  // dirt.jpg
   floor.matrix.translate(0, -0.75, 0);
-  floor.matrix.scale(10, 0, 10);
+  floor.matrix.scale(32, 0, 32);
   floor.matrix.translate(-0.5, 0, -0.5);
   floor.render();
 
@@ -385,8 +341,7 @@ function sentTextToHTML(text, htmlID) {
 
 function resetCamera() {
   console.log("Resetting camera position.");
-  g_globalAngle = 0.0;
-  g_pitchAngle = 0.0;
+  camera = new Camera(); // 重新初始化相机
   renderScene();
 }
 
